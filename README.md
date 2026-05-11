@@ -4,7 +4,7 @@
 
 ## ローカル起動
 
-1. `.env.example` を `.env` にコピーします。
+1. `.env` を用意します。
 2. 次のコマンドで起動します。
 
 ```bash
@@ -39,6 +39,12 @@ docker compose up --build
 - `deploy/dog-growth-journal.service`: systemd 自動起動設定
 - `docs/aws-ec2-deploy.md`: EC2 デプロイ手順
 
+## 本番設定のポイント
+
+- `DATABASE_URL` と `POSTGRES_PASSWORD` は同じパスワードにそろえます。
+- 本番では `docker compose --env-file .env.production` を使うため、`.env.production` だけでデプロイできます。
+- `PUBLIC_PORT=80` で EC2 公開、ローカルでは `PUBLIC_PORT=8001` で利用できます。
+
 ## ローカル確認
 
 ```bash
@@ -48,10 +54,3 @@ pytest
 ## AWS / EC2 デプロイ
 
 概要は [docs/aws-ec2-deploy.md](docs/aws-ec2-deploy.md) を見てください。
-
-最短手順は次です。
-
-```bash
-cp .env.production.example .env.production
-./scripts/deploy-prod.sh
-```

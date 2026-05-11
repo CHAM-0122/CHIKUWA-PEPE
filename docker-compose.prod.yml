@@ -1,5 +1,7 @@
 services:
   app:
+    env_file:
+      - .env.production
     restart: unless-stopped
 
   db:

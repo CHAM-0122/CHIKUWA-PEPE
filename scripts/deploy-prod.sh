@@ -9,6 +9,8 @@ if [ ! -f .env.production ]; then
   exit 1
 fi
 
+docker compose   --env-file .env.production   -f docker-compose.yml   -f docker-compose.prod.yml   down
+
 docker compose   --env-file .env.production   -f docker-compose.yml   -f docker-compose.prod.yml   up -d --build
 
 docker compose   --env-file .env.production   -f docker-compose.yml   -f docker-compose.prod.yml   ps

@@ -34,8 +34,12 @@ docker compose up --build
 
 - `.env.production.example`: 本番用環境変数の雛形
 - `docker-compose.prod.yml`: EC2 本番向けの Compose 上書き設定
+- `docker-compose.https.yml`: HTTPS 有効化用の Compose 上書き設定
 - `scripts/ec2-bootstrap.sh`: Amazon Linux 2023 初期セットアップ
 - `scripts/deploy-prod.sh`: 本番デプロイスクリプト
+- `scripts/request-cert.sh`: Let's Encrypt 証明書の初回取得
+- `scripts/deploy-https.sh`: HTTPS 構成でのデプロイ
+- `scripts/renew-cert.sh`: 証明書更新
 - `deploy/dog-growth-journal.service`: systemd 自動起動設定
 - `docs/aws-ec2-deploy.md`: EC2 デプロイ手順
 
@@ -44,6 +48,21 @@ docker compose up --build
 - `DATABASE_URL` と `POSTGRES_PASSWORD` は同じパスワードにそろえます。
 - 本番では `docker compose --env-file .env.production` を使うため、`.env.production` だけでデプロイできます。
 - `PUBLIC_PORT=80` で EC2 公開、ローカルでは `PUBLIC_PORT=8001` で利用できます。
+
+## HTTPS 化
+
+`chamcham.blog` などの独自ドメインを EC2 の Elastic IP に向けたあと、次の流れで HTTPS 化できます。
+
+```bash
+./scripts/request-cert.sh "$HOME/CHIKUWA-PEPE" chamcham.blog you@example.com
+./scripts/deploy-https.sh
+```
+
+更新確認:
+
+```bash
+./scripts/renew-cert.sh
+```
 
 ## ローカル確認
 

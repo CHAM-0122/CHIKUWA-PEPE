@@ -1,0 +1,15 @@
+[Unit]
+Description=Dog Growth Journal Docker Compose Service
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ec2-user/CHIKUWA-PEPE
+ExecStart=/usr/bin/docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+ExecStop=/usr/bin/docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}犬一覧 | Dog Growth Journal{% endblock %}
+{% block content %}
+<section class="grid two">
+  <article class="panel">
+    <div class="panel-head">
+      <h1>犬一覧</h1>
+      <span class="badge">{{ dogs|length }}匹</span>
+    </div>
+    {% if dogs %}
+      <div class="card-list">
+        {% for dog in dogs %}
+          <a class="dog-card" href="/dogs/{{ dog.id }}">
+            {% if dog.profile_image %}
+              <img src="/uploads/{{ dog.profile_image }}" alt="{{ dog.name }}" />
+            {% else %}
+              <div class="dog-placeholder">{{ dog.name[:1] }}</div>
+            {% endif %}
+            <div>
+              <strong>{{ dog.name }}</strong>
+              <p>{{ dog.breed or "犬種未設定" }}</p>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">犬はまだ登録されていません。</p>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <h2>新しい犬を登録</h2>
+    {% include "partials/errors.html" %}
+    {% include "partials/dog_form.html" %}
+  </article>
+</section>
+{% endblock %}

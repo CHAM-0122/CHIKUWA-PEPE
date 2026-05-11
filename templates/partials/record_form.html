@@ -1,0 +1,58 @@
+<form class="stack" method="post" enctype="multipart/form-data" action="{% if record is defined %}/records/{{ record.id }}/edit{% else %}/records{% endif %}">
+  {% set selected_dog_id = form_data.dog_id if form_data else record.dog_id if record is defined else dog.id if dog is defined else '' %}
+  {% set selected_record_date = form_data.record_date if form_data else record.record_date if record is defined else '' %}
+  {% set selected_weight = form_data.weight if form_data else record.weight if record is defined and record.weight is not none else '' %}
+  {% set selected_food_notes = form_data.food_notes if form_data else record.food_notes if record is defined and record.food_notes else '' %}
+  {% set selected_walk_notes = form_data.walk_notes if form_data else record.walk_notes if record is defined and record.walk_notes else '' %}
+  {% set selected_health_notes = form_data.health_notes if form_data else record.health_notes if record is defined and record.health_notes else '' %}
+  <label>
+    対象の犬
+    <select name="dog_id" required>
+      <option value="">選択してください</option>
+      {% if dogs is defined %}
+        {% for item in dogs %}
+          <option value="{{ item.id }}" {% if selected_dog_id|string == item.id|string %}selected{% endif %}>{{ item.name }}</option>
+        {% endfor %}
+      {% elif dog is defined %}
+        <option value="{{ dog.id }}" selected>{{ dog.name }}</option>
+      {% endif %}
+    </select>
+  </label>
+  <label>
+    記録日
+    <input type="date" name="record_date" value="{{ selected_record_date }}" required />
+  </label>
+  <label>
+    体重 (kg)
+    <input type="number" step="0.01" min="0" name="weight" value="{{ selected_weight }}" />
+  </label>
+  <label>
+    食事メモ
+    <textarea name="food_notes" rows="3">{{ selected_food_notes }}</textarea>
+  </label>
+  <label>
+    散歩メモ
+    <textarea name="walk_notes" rows="3">{{ selected_walk_notes }}</textarea>
+  </label>
+  <label>
+    体調メモ
+    <textarea name="health_notes" rows="3">{{ selected_health_notes }}</textarea>
+  </label>
+  {% if record is defined and record.photo_path %}
+    <div class="inline-photo-block">
+      <p class="eyebrow">現在の写真</p>
+      <div class="record-media preview-inline">
+        <img class="record-image" src="/uploads/{{ record.photo_path }}" alt="現在の記録写真" />
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" name="remove_photo" value="1" />
+        <span>現在の写真を削除する</span>
+      </label>
+    </div>
+  {% endif %}
+  <label>
+    写真
+    <input type="file" name="photo" accept=".jpg,.jpeg,.png,.gif,.webp" />
+  </label>
+  <button class="button primary" type="submit">保存する</button>
+</form>

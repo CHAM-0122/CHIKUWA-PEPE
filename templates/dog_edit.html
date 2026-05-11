@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ dog.name }} を編集 | Dog Growth Journal{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <div class="panel-head">
+    <h1>{{ dog.name }} のプロフィール編集</h1>
+    <a class="button ghost" href="/dogs/{{ dog.id }}">戻る</a>
+  </div>
+  {% include "partials/errors.html" %}
+  {% include "partials/dog_form.html" %}
+</section>
+{% endblock %}

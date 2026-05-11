@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}記録一覧 | Dog Growth Journal{% endblock %}
+{% block content %}
+<section class="grid two">
+  <article class="panel">
+    <div class="panel-head">
+      <h1>記録一覧</h1>
+      {% if selected_dog %}
+        <span class="badge">{{ selected_dog.name }}</span>
+      {% endif %}
+    </div>
+    <div class="filter-row">
+      <a class="button ghost" href="/records">すべて表示</a>
+      {% for dog in dogs %}
+        <a class="button {% if selected_dog and selected_dog.id == dog.id %}secondary{% else %}ghost{% endif %}" href="/records?dog_id={{ dog.id }}">{{ dog.name }}</a>
+      {% endfor %}
+    </div>
+    {% if records %}
+      <div class="timeline">
+        {% for record in records %}
+          <article class="record-card">
+            <div class="record-head">
+              <div>
+                <strong>{{ record.dog.name }}</strong>
+                <p>{{ record.record_date }}</p>
+              </div>
+              <div class="mini-actions">
+                <a href="/records/{{ record.id }}/edit">編集</a>
+                <form method="post" action="/records/{{ record.id }}/delete" onsubmit="return confirm('この記録を削除しますか？');">
+                  <button class="link-button danger-text" type="submit">削除</button>
+                </form>
+              </div>
+            </div>
+            <p>{% if record.weight %}体重: {{ record.weight }}kg{% else %}体重未入力{% endif %}</p>
+            <p>{{ record.food_notes or "食事メモなし" }}</p>
+            <p>{{ record.walk_notes or "散歩メモなし" }}</p>
+            <p>{{ record.health_notes or "体調メモなし" }}</p>
+            {% if record.photo_path %}
+              <div class="record-media wide">
+                <img class="record-image" src="/uploads/{{ record.photo_path }}" alt="{{ record.dog.name }}の記録写真" />
+              </div>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">条件に一致する記録はありません。</p>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <h2>新しい記録を追加</h2>
+    {% if not dogs %}
+      <p class="empty">先に犬を登録してください。</p>
+    {% else %}
+      {% include "partials/errors.html" %}
+      {% include "partials/record_form.html" %}
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ dog.name }} | Dog Growth Journal{% endblock %}
+{% block content %}
+<section class="detail-hero">
+  <div class="detail-main">
+    <div class="detail-card">
+      {% if dog.profile_image %}
+        <img class="profile-image" src="/uploads/{{ dog.profile_image }}" alt="{{ dog.name }}" />
+      {% else %}
+        <div class="profile-fallback">{{ dog.name[:1] }}</div>
+      {% endif %}
+      <div>
+        <p class="eyebrow">Dog Profile</p>
+        <h1>{{ dog.name }}</h1>
+        <p>{{ dog.breed or "犬種未設定" }}{% if dog.sex %} ・ {{ dog.sex }}{% endif %}</p>
+        <p>生年月日: {{ dog.birth_date or "未設定" }}</p>
+        <p>{{ dog.notes or "メモはまだありません。" }}</p>
+        <div class="chip-row top-gap">
+          <span class="chip">記録 {{ dog.records|length }}件</span>
+          {% if latest_record and latest_record.weight %}
+            <span class="chip">最新体重 {{ latest_record.weight }}kg</span>
+          {% elif latest_record %}
+            <span class="chip">最新記録 {{ latest_record.record_date }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="action-row">
+      <a class="button secondary" href="/dogs/{{ dog.id }}/edit">プロフィールを編集</a>
+      <form method="post" action="/dogs/{{ dog.id }}/delete" onsubmit="return confirm('この犬のプロフィールと記録を削除しますか？');">
+        <button class="button danger" type="submit">犬を削除</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="grid two">
+  <article class="panel">
+    <div class="panel-head">
+      <h2>{{ dog.name }} の記録</h2>
+      <a class="button ghost" href="/records?dog_id={{ dog.id }}">一覧で見る</a>
+    </div>
+    {% if dog.records %}
+      <div class="timeline">
+        {% for record in dog.records %}
+          <article class="record-card">
+            <div class="record-head">
+              <strong>{{ record.record_date }}</strong>
+              <div class="mini-actions">
+                <a href="/records/{{ record.id }}/edit">編集</a>
+                <form method="post" action="/records/{{ record.id }}/delete" onsubmit="return confirm('この記録を削除しますか？');">
+                  <button class="link-button danger-text" type="submit">削除</button>
+                </form>
+              </div>
+            </div>
+            <p>{% if record.weight %}体重: {{ record.weight }}kg{% else %}体重未入力{% endif %}</p>
+            <p>{{ record.food_notes or "食事メモなし" }}</p>
+            <p>{{ record.walk_notes or "散歩メモなし" }}</p>
+            <p>{{ record.health_notes or "体調メモなし" }}</p>
+            {% if record.photo_path %}
+              <div class="record-media">
+                <img class="record-image" src="/uploads/{{ record.photo_path }}" alt="{{ dog.name }}の記録写真" />
+              </div>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">この犬の記録はまだありません。</p>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <h2>新しい記録を追加</h2>
+    {% include "partials/errors.html" %}
+    {% include "partials/record_form.html" %}
+  </article>
+</section>
+{% endblock %}

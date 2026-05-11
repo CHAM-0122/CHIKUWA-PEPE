@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}ホーム | Dog Growth Journal{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Dog Journal</p>
+    <h1>毎日の成長を、犬ごとにやさしく記録。</h1>
+    <p class="lede">プロフィール、体重、食事、散歩、体調、写真をひとつの場所にまとめられます。</p>
+  </div>
+  <div class="hero-actions">
+    <a class="button primary" href="/dogs">犬を登録する</a>
+    <a class="button secondary" href="/records">記録をつける</a>
+  </div>
+</section>
+
+<section class="summary-grid">
+  <article class="summary-card">
+    <p class="eyebrow">Dogs</p>
+    <strong>{{ dogs|length }}匹</strong>
+    <span>登録中の犬</span>
+  </article>
+  <article class="summary-card">
+    <p class="eyebrow">Records</p>
+    <strong>{{ total_records }}</strong>
+    <span>これまでの記録数</span>
+  </article>
+  <article class="summary-card">
+    <p class="eyebrow">This Week</p>
+    <strong>{{ weekly_records }}</strong>
+    <span>直近7日間の記録</span>
+  </article>
+</section>
+
+<section class="grid two">
+  <article class="panel">
+    <div class="panel-head">
+      <h2>登録した犬</h2>
+      <span class="badge">{{ dogs|length }}匹</span>
+    </div>
+    {% if dog_summaries %}
+      <div class="card-list">
+        {% for summary in dog_summaries %}
+          <a class="dog-card rich" href="/dogs/{{ summary.dog.id }}">
+            {% if summary.dog.profile_image %}
+              <img src="/uploads/{{ summary.dog.profile_image }}" alt="{{ summary.dog.name }}" />
+            {% else %}
+              <div class="dog-placeholder">{{ summary.dog.name[:1] }}</div>
+            {% endif %}
+            <div>
+              <strong>{{ summary.dog.name }}</strong>
+              <p>{{ summary.dog.breed or "犬種未設定" }}</p>
+              <div class="chip-row">
+                <span class="chip">記録 {{ summary.record_count }}件</span>
+                {% if summary.latest_record and summary.latest_record.weight %}
+                  <span class="chip">最新 {{ summary.latest_record.weight }}kg</span>
+                {% elif summary.latest_record %}
+                  <span class="chip">最新 {{ summary.latest_record.record_date }}</span>
+                {% endif %}
+              </div>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">まずは犬のプロフィールを登録しましょう。</p>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <h2>最近の記録</h2>
+    </div>
+    {% if recent_records %}
+      <div class="timeline">
+        {% for record in recent_records %}
+          <a class="timeline-item" href="/records/{{ record.id }}/edit">
+            <div>
+              <strong>{{ record.dog.name }}</strong>
+              <p>{{ record.record_date }}</p>
+            </div>
+            <span>{% if record.weight %}{{ record.weight }}kg{% else %}記録を見る{% endif %}</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">まだ記録はありません。</p>
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

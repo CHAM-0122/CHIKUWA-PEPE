@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Dog Growth Journal{% endblock %}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="shell header-shell">
+        <a class="brand" href="/">Dog Growth Journal</a>
+        <nav class="nav">
+          <a href="/dogs">犬一覧</a>
+          <a href="/records">記録一覧</a>
+        </nav>
+      </div>
+    </header>
+    <main class="shell page-shell">
+      {% if notice %}
+        <div class="notice-banner">{{ notice }}</div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

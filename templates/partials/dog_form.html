@@ -1,0 +1,44 @@
+<form class="stack" method="post" enctype="multipart/form-data">
+  <label>
+    犬名
+    <input type="text" name="name" value="{{ form_data.name if form_data else dog.name if dog is defined else '' }}" required />
+  </label>
+  <label>
+    生年月日
+    <input type="date" name="birth_date" value="{{ form_data.birth_date if form_data else dog.birth_date if dog is defined and dog.birth_date else '' }}" />
+  </label>
+  <label>
+    犬種
+    <input type="text" name="breed" value="{{ form_data.breed if form_data else dog.breed if dog is defined and dog.breed else '' }}" />
+  </label>
+  <label>
+    性別
+    <select name="sex">
+      {% set selected_sex = form_data.sex if form_data else dog.sex if dog is defined else '' %}
+      <option value="">選択してください</option>
+      <option value="オス" {% if selected_sex == 'オス' %}selected{% endif %}>オス</option>
+      <option value="メス" {% if selected_sex == 'メス' %}selected{% endif %}>メス</option>
+    </select>
+  </label>
+  <label>
+    メモ
+    <textarea name="notes" rows="4">{{ form_data.notes if form_data else dog.notes if dog is defined and dog.notes else '' }}</textarea>
+  </label>
+  {% if dog is defined and dog.profile_image %}
+    <div class="inline-photo-block">
+      <p class="eyebrow">現在のプロフィール画像</p>
+      <div class="record-media preview-inline">
+        <img class="record-image" src="/uploads/{{ dog.profile_image }}" alt="{{ dog.name }}のプロフィール画像" />
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" name="remove_profile_image" value="1" />
+        <span>現在の画像を削除する</span>
+      </label>
+    </div>
+  {% endif %}
+  <label>
+    プロフィール画像
+    <input type="file" name="profile_image" accept=".jpg,.jpeg,.png,.gif,.webp" />
+  </label>
+  <button class="button primary" type="submit">保存する</button>
+</form>

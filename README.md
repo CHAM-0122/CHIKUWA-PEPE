@@ -73,3 +73,8 @@ pytest
 ## AWS / EC2 デプロイ
 
 概要は [docs/aws-ec2-deploy.md](docs/aws-ec2-deploy.md) を見てください。
+
+
+## 監視・ログ保管
+
+CloudWatch Logs と S3 を使う構成は [docs/aws-observability.md](docs/aws-observability.md) を見てください。

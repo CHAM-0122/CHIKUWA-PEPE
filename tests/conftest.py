@@ -13,7 +13,7 @@ from app.main import create_app
 
 
 @pytest.fixture()
-def client(tmp_path: Path):
+def raw_client(tmp_path: Path):
     db_path = tmp_path / "test.db"
     upload_dir = tmp_path / "uploads"
     settings = Settings(
@@ -25,3 +25,18 @@ def client(tmp_path: Path):
     app = create_app(settings)
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture()
+def client(raw_client: TestClient):
+    response = raw_client.post(
+        "/setup",
+        data={
+            "email": "owner@example.com",
+            "password": "verysecurepassword",
+            "password_confirm": "verysecurepassword",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    yield raw_client

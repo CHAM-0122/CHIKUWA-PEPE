@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}初期設定 | Dog Growth Journal{% endblock %}
+{% block content %}
+<section class="auth-shell">
+  <article class="panel auth-panel">
+    <p class="eyebrow">First Setup</p>
+    <h1>最初のログインアカウントを作成</h1>
+    <p class="auth-copy">このアプリは個人利用向けです。最初の飼い主アカウントを 1 つ作成すると、その後はログインして使えるようになります。</p>
+    {% include "partials/errors.html" %}
+    <form class="stack" method="post" action="/setup">
+      <label>
+        メールアドレス
+        <input type="email" name="email" value="{{ form_data.email if form_data else '' }}" required />
+      </label>
+      <label>
+        パスワード
+        <input type="password" name="password" minlength="8" required />
+      </label>
+      <label>
+        パスワード確認
+        <input type="password" name="password_confirm" minlength="8" required />
+      </label>
+      <button class="button primary" type="submit">アカウントを作成する</button>
+    </form>
+  </article>
+</section>
+{% endblock %}

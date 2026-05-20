@@ -2,6 +2,44 @@ from io import BytesIO
 from pathlib import Path
 
 
+def test_setup_and_login_flow(raw_client):
+    setup_page = raw_client.get("/", follow_redirects=True)
+    assert setup_page.status_code == 200
+    assert "最初のログインアカウントを作成" in setup_page.text
+
+    created = raw_client.post(
+        "/setup",
+        data={
+            "email": "owner@example.com",
+            "password": "verysecurepassword",
+            "password_confirm": "verysecurepassword",
+        },
+        follow_redirects=True,
+    )
+    assert created.status_code == 200
+    assert "ログイン用アカウントを作成しました" in created.text
+
+    logout = raw_client.post("/logout", follow_redirects=True)
+    assert logout.status_code == 200
+    assert "ログアウトしました" in logout.text
+
+    failed = raw_client.post(
+        "/login",
+        data={"email": "owner@example.com", "password": "wrongpass123"},
+        follow_redirects=True,
+    )
+    assert failed.status_code == 400
+    assert "メールアドレスまたはパスワードが違います" in failed.text
+
+    login = raw_client.post(
+        "/login",
+        data={"email": "owner@example.com", "password": "verysecurepassword"},
+        follow_redirects=True,
+    )
+    assert login.status_code == 200
+    assert "ログインしました" in login.text
+
+
 def test_create_multiple_dogs_and_list_in_api(client):
     response = client.post(
         "/dogs",
@@ -27,6 +65,26 @@ def test_create_multiple_dogs_and_list_in_api(client):
     assert response.status_code == 200
     names = [dog["name"] for dog in response.json()]
     assert names == ["Mugi", "Sora"]
+
+
+def test_requires_login_after_setup(raw_client):
+    raw_client.post(
+        "/setup",
+        data={
+            "email": "owner@example.com",
+            "password": "verysecurepassword",
+            "password_confirm": "verysecurepassword",
+        },
+        follow_redirects=True,
+    )
+    raw_client.post("/logout", follow_redirects=True)
+
+    page = raw_client.get("/dogs", follow_redirects=False)
+    assert page.status_code == 303
+    assert page.headers["location"] == "/login"
+
+    api_response = raw_client.get("/api/dogs")
+    assert api_response.status_code == 401
 
 
 def test_create_record_for_specific_dog_and_filter_records(client):

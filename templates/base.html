@@ -11,8 +11,18 @@
       <div class="shell header-shell">
         <a class="brand" href="/">Dog Growth Journal</a>
         <nav class="nav">
-          <a href="/dogs">犬一覧</a>
-          <a href="/records">記録一覧</a>
+          {% if current_user %}
+            <a href="/dogs">犬一覧</a>
+            <a href="/records">記録一覧</a>
+            <span class="user-chip">{{ current_user.email }}</span>
+            <form method="post" action="/logout">
+              <button class="link-button nav-button" type="submit">ログアウト</button>
+            </form>
+          {% elif has_users %}
+            <a href="/login">ログイン</a>
+          {% else %}
+            <a href="/setup">初期設定</a>
+          {% endif %}
         </nav>
       </div>
     </header>

@@ -392,3 +392,31 @@ form {
     width: 100%;
   }
 }
+
+
+.nav-button {
+  color: var(--accent-dark);
+}
+
+.user-chip {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(241, 223, 196, 0.8);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.auth-shell {
+  display: grid;
+  place-items: center;
+  min-height: calc(100vh - 180px);
+}
+
+.auth-panel {
+  width: min(560px, 100%);
+}
+
+.auth-copy {
+  color: var(--muted);
+  margin-bottom: 20px;
+}

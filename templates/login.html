@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}ログイン | Dog Growth Journal{% endblock %}
+{% block content %}
+<section class="auth-shell">
+  <article class="panel auth-panel">
+    <p class="eyebrow">Login</p>
+    <h1>ログイン</h1>
+    <p class="auth-copy">登録済みのメールアドレスとパスワードで Dog Growth Journal に入ります。</p>
+    {% include "partials/errors.html" %}
+    <form class="stack" method="post" action="/login">
+      <label>
+        メールアドレス
+        <input type="email" name="email" value="{{ form_data.email if form_data else '' }}" required />
+      </label>
+      <label>
+        パスワード
+        <input type="password" name="password" minlength="8" required />
+      </label>
+      <button class="button primary" type="submit">ログインする</button>
+    </form>
+  </article>
+</section>
+{% endblock %}

@@ -1,8 +1,11 @@
 .env
+.env.production
 .pytest_cache/
 __pycache__/
 *.pyc
 uploads/*
 !uploads/.gitkeep
 .venv/
-.env.production
+.DS_Store
+._*
+**/._*

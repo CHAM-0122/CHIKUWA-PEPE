@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import secrets
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
@@ -12,13 +14,19 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
+from starlette.middleware.sessions import SessionMiddleware
 
 from .config import Settings, get_settings
 from .db import Base, create_db_engine, create_session_local
-from .models import DailyRecord, Dog
+from .models import DailyRecord, Dog, User
 
 
 templates = Jinja2Templates(directory="templates")
+PUBLIC_PATH_PREFIXES = ("/static", "/uploads")
+SETUP_PATHS = {"/setup"}
+AUTH_PATHS = {"/login", "/logout"}
+OPEN_PATHS = {"/healthz"}
+PASSWORD_ITERATIONS = 390000
 
 
 def parse_optional_date(value: str | None) -> date | None:
@@ -43,6 +51,35 @@ def validate_weight(weight: str | None) -> tuple[float | None, str | None]:
     if parsed <= 0:
         return None, "体重は正の数で入力してください。"
     return parsed, None
+
+
+def normalize_email(value: str) -> str:
+    return value.strip().lower()
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        PASSWORD_ITERATIONS,
+    ).hex()
+    return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${salt}${digest}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    try:
+        _, iterations, salt, digest = stored_hash.split("$", 3)
+    except ValueError:
+        return False
+    candidate = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        int(iterations),
+    ).hex()
+    return hmac.compare_digest(candidate, digest)
 
 
 def build_upload_url(relative_path: str | None) -> str | None:
@@ -106,6 +143,8 @@ def render_template(
     payload = {
         "request": request,
         "notice": request.query_params.get("message"),
+        "current_user": getattr(request.state, "current_user", None),
+        "has_users": getattr(request.state, "has_users", False),
         **context,
     }
     return templates.TemplateResponse(request, name, payload, status_code=status_code)
@@ -131,6 +170,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         StaticFiles(directory=app.state.settings.upload_dir, check_dir=False),
         name="uploads",
     )
+
+    @app.middleware("http")
+    async def require_authentication(request: Request, call_next):
+        path = request.url.path
+        if path.startswith(PUBLIC_PATH_PREFIXES) or path in OPEN_PATHS:
+            return await call_next(request)
+
+        with request.app.state.SessionLocal() as session:
+            user_count = session.scalar(select(func.count(User.id))) or 0
+            user_id = request.session.get("user_id")
+            current_user = session.get(User, user_id) if user_id else None
+            if user_id and not current_user:
+                request.session.clear()
+            request.state.current_user = current_user
+            request.state.has_users = user_count > 0
+
+        if user_count == 0:
+            if path not in SETUP_PATHS:
+                if path.startswith("/api/"):
+                    return JSONResponse(status_code=503, content={"detail": "Account setup is required."})
+                return RedirectResponse(url="/setup", status_code=303)
+        else:
+            if path in SETUP_PATHS:
+                target = "/" if request.state.current_user else "/login"
+                return RedirectResponse(url=target, status_code=303)
+            if path == "/login" and request.state.current_user:
+                return RedirectResponse(url="/", status_code=303)
+            if path == "/logout" and not request.state.current_user:
+                return RedirectResponse(url="/login", status_code=303)
+            if path not in AUTH_PATHS and not request.state.current_user:
+                if path.startswith("/api/"):
+                    return JSONResponse(status_code=401, content={"detail": "Authentication required."})
+                return RedirectResponse(url="/login", status_code=303)
+
+        return await call_next(request)
 
     def validate_record_form(
         db: Session,
@@ -169,6 +243,88 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             errors.append(weight_error)
 
         return errors, dog, parsed_date, parsed_weight
+
+    @app.get("/setup", response_class=HTMLResponse)
+    def setup_page(request: Request):
+        return render_template(
+            request,
+            "setup.html",
+            {"errors": [], "form_data": {}},
+        )
+
+    @app.post("/setup", response_class=HTMLResponse)
+    def create_initial_account(
+        request: Request,
+        email: str = Form(...),
+        password: str = Form(...),
+        password_confirm: str = Form(...),
+        db: Session = Depends(get_db),
+    ):
+        if db.scalar(select(func.count(User.id))) or 0:
+            return RedirectResponse(url="/login", status_code=303)
+
+        normalized_email = normalize_email(email)
+        errors: list[str] = []
+        if not normalized_email:
+            errors.append("メールアドレスは必須です。")
+        if "@" not in normalized_email:
+            errors.append("有効なメールアドレスを入力してください。")
+        if len(password) < 8:
+            errors.append("パスワードは 8 文字以上で入力してください。")
+        if password != password_confirm:
+            errors.append("確認用パスワードが一致しません。")
+
+        if errors:
+            return render_template(
+                request,
+                "setup.html",
+                {"errors": errors, "form_data": {"email": email}},
+                status_code=400,
+            )
+
+        user = User(email=normalized_email, password_hash=hash_password(password))
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        request.session["user_id"] = user.id
+        request.state.current_user = user
+        request.state.has_users = True
+        return redirect_with_message("/", "ログイン用アカウントを作成しました。")
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_page(request: Request):
+        return render_template(
+            request,
+            "login.html",
+            {"errors": [], "form_data": {}},
+        )
+
+    @app.post("/login", response_class=HTMLResponse)
+    def login(
+        request: Request,
+        email: str = Form(...),
+        password: str = Form(...),
+        db: Session = Depends(get_db),
+    ):
+        normalized_email = normalize_email(email)
+        user = db.scalar(select(User).where(User.email == normalized_email))
+        if not user or not verify_password(password, user.password_hash):
+            return render_template(
+                request,
+                "login.html",
+                {"errors": ["メールアドレスまたはパスワードが違います。"], "form_data": {"email": email}},
+                status_code=400,
+            )
+
+        request.session["user_id"] = user.id
+        request.state.current_user = user
+        request.state.has_users = True
+        return redirect_with_message("/", "ログインしました。")
+
+    @app.post("/logout")
+    def logout(request: Request):
+        request.session.clear()
+        return redirect_with_message("/login", "ログアウトしました。")
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request, db: Session = Depends(get_db)):
@@ -681,6 +837,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {"message": exc.detail if isinstance(exc.detail, str) else "入力エラーが発生しました。"},
             status_code=exc.status_code,
         )
+
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=app.state.settings.secret_key,
+        same_site="lax",
+        https_only=app.state.settings.app_env == "production",
+        max_age=60 * 60 * 24 * 14,
+    )
 
     return app
 

@@ -39,6 +39,16 @@ def migrate_existing_schema(engine) -> None:
             connection.execute(text("ALTER TABLE dogs ADD COLUMN user_id INTEGER"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_dogs_user_id ON dogs (user_id)"))
 
+        if "users" not in inspector.get_table_names():
+            return
+
+        user_ids = connection.execute(text("SELECT id FROM users ORDER BY id ASC")).scalars().all()
+        if len(user_ids) == 1:
+            connection.execute(
+                text("UPDATE dogs SET user_id = :user_id WHERE user_id IS NULL"),
+                {"user_id": user_ids[0]},
+            )
+
 
 def parse_optional_date(value: str | None) -> date | None:
     if not value:

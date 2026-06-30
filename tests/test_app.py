@@ -45,13 +45,6 @@ def test_setup_and_login_flow(raw_client):
     assert login.status_code == 200
     assert "ログインしました" in login.text
 
-
-from fastapi.testclient import TestClient
-
-from app.config import Settings
-from app.main import create_app
-
-
 def test_register_creates_second_user_and_isolates_dogs(client):
     first_dog = client.post('/api/dogs', data={'name': 'Mugi'})
     assert first_dog.status_code == 201
@@ -79,6 +72,74 @@ def test_register_creates_second_user_and_isolates_dogs(client):
     first_user_dogs = client.get('/api/dogs')
     assert first_user_dogs.status_code == 200
     assert [dog['name'] for dog in first_user_dogs.json()] == ['Mugi']
+
+
+def test_migrates_legacy_dogs_to_existing_single_user(tmp_path):
+    db_path = tmp_path / "legacy_existing_user.db"
+    upload_dir = tmp_path / "uploads-existing-user"
+
+    connection = sqlite3.connect(db_path)
+    connection.execute(
+        """
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE dogs (
+            id INTEGER PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            birth_date DATE,
+            breed VARCHAR(100),
+            sex VARCHAR(20),
+            notes TEXT,
+            profile_image VARCHAR(255),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE daily_records (
+            id INTEGER PRIMARY KEY,
+            dog_id INTEGER NOT NULL,
+            record_date DATE NOT NULL,
+            weight FLOAT,
+            food_notes TEXT,
+            walk_notes TEXT,
+            health_notes TEXT,
+            photo_path VARCHAR(255),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        "INSERT INTO users (id, email, password_hash) VALUES (1, 'owner@example.com', 'pbkdf2_sha256$390000$deadbeefdeadbeefdeadbeefdeadbeef$7a6f0b6d8b6fef0d0ce8b5ec0f9a5f1fd8ff9cbe5e90b2bb8e8a7a66d5ef5b23')"
+    )
+    connection.execute("INSERT INTO dogs (name) VALUES ('Legacy Dog')")
+    connection.commit()
+    connection.close()
+
+    settings = Settings(
+        app_env="test",
+        database_url=f"sqlite:///{db_path}",
+        upload_dir=str(upload_dir),
+        secret_key="test-secret",
+    )
+
+    app = create_app(settings)
+    with TestClient(app) as legacy_client:
+        with sqlite3.connect(db_path) as verify_connection:
+            rows = verify_connection.execute("SELECT id, name, user_id FROM dogs ORDER BY id").fetchall()
+        assert rows == [(1, 'Legacy Dog', 1)]
 
 
 def test_migrates_legacy_dogs_and_claims_them_on_first_setup(tmp_path):

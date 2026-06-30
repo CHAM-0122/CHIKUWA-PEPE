@@ -67,6 +67,36 @@ def test_admin_dashboard_visible_only_to_admin(client):
         assert '管理者のみアクセスできます' in forbidden.text
 
 
+def test_admin_can_promote_and_demote_other_users(client):
+    with TestClient(client.app) as second_client:
+        second_client.post(
+            '/register',
+            data={
+                'email': 'family@example.com',
+                'password': 'anothersecurepassword',
+                'password_confirm': 'anothersecurepassword',
+            },
+            follow_redirects=True,
+        )
+
+    admin_page = client.get('/admin')
+    assert '管理者にする' in admin_page.text
+
+    promoted = client.post('/admin/users/2/role', data={'is_admin': '1'}, follow_redirects=True)
+    assert promoted.status_code == 200
+    assert '管理者権限を更新しました。' in promoted.text
+
+    demoted = client.post('/admin/users/2/role', data={'is_admin': '0'}, follow_redirects=True)
+    assert demoted.status_code == 200
+    assert '管理者権限を更新しました。' in demoted.text
+
+
+def test_last_admin_cannot_be_demoted(client):
+    response = client.post('/admin/users/1/role', data={'is_admin': '0'}, follow_redirects=True)
+    assert response.status_code == 200
+    assert '最後の管理者は解除できません。' in response.text
+
+
 def test_register_creates_second_user_and_isolates_dogs(client):
     first_dog = client.post('/api/dogs', data={'name': 'Mugi'})
     assert first_dog.status_code == 201

@@ -494,6 +494,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         users = db.scalars(select(User).options(selectinload(User.dogs)).order_by(User.created_at.asc(), User.id.asc())).all()
         total_dogs = db.scalar(select(func.count(Dog.id))) or 0
         total_records = db.scalar(select(func.count(DailyRecord.id))) or 0
+        admin_count = sum(1 for user in users if user.is_admin)
+        current_user_id_value = current_user_id(request)
         user_rows = []
         for user in users:
             record_count = db.scalar(
@@ -504,6 +506,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "user": user,
                     "dog_count": len(user.dogs),
                     "record_count": record_count,
+                    "can_demote": user.is_admin and admin_count > 1,
+                    "is_current_user": user.id == current_user_id_value,
                 }
             )
 
@@ -517,6 +521,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "total_records": total_records,
             },
         )
+
+    @app.post("/admin/users/{user_id}/role")
+    def update_user_role(
+        request: Request,
+        user_id: int,
+        is_admin: str = Form(...),
+        db: Session = Depends(get_db),
+    ):
+        require_admin(request)
+
+        target_user = db.get(User, user_id)
+        if not target_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        promote = is_admin == "1"
+        current_admin_count = db.scalar(select(func.count(User.id)).where(User.is_admin.is_(True))) or 0
+        if not promote and target_user.is_admin and current_admin_count <= 1:
+            return redirect_with_message("/admin", "最後の管理者は解除できません。")
+
+        if target_user.is_admin == promote:
+            message = "変更はありませんでした。"
+        else:
+            target_user.is_admin = promote
+            db.add(target_user)
+            db.commit()
+            message = "管理者権限を更新しました。"
+
+        return redirect_with_message("/admin", message)
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request, db: Session = Depends(get_db)):

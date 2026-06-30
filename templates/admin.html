@@ -42,6 +42,7 @@
             <th>犬数</th>
             <th>記録数</th>
             <th>登録日</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -52,6 +53,21 @@
               <td>{{ row.dog_count }}</td>
               <td>{{ row.record_count }}</td>
               <td>{{ row.user.created_at.date() if row.user.created_at else "-" }}</td>
+              <td>
+                <form method="post" action="/admin/users/{{ row.user.id }}/role" class="inline-form">
+                  {% if row.user.is_admin %}
+                    {% if row.can_demote %}
+                      <input type="hidden" name="is_admin" value="0" />
+                      <button type="submit" class="button secondary admin-action">管理者を解除</button>
+                    {% else %}
+                      <span class="chip muted">解除不可</span>
+                    {% endif %}
+                  {% else %}
+                    <input type="hidden" name="is_admin" value="1" />
+                    <button type="submit" class="button secondary admin-action">管理者にする</button>
+                  {% endif %}
+                </form>
+              </td>
             </tr>
           {% endfor %}
         </tbody>

@@ -456,3 +456,17 @@ form {
   letter-spacing: 0.04em;
   color: var(--muted);
 }
+
+
+.inline-form {
+  margin: 0;
+}
+
+.admin-action {
+  white-space: nowrap;
+}
+
+.chip.muted {
+  background: rgba(49, 39, 27, 0.08);
+  color: var(--muted);
+}

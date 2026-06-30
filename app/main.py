@@ -44,12 +44,12 @@ def migrate_existing_schema(engine) -> None:
 
         user_columns = {column["name"] for column in inspector.get_columns("users")}
         if "is_admin" not in user_columns:
-            connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
+            connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
 
         user_ids = connection.execute(text("SELECT id FROM users ORDER BY id ASC")).scalars().all()
         if user_ids:
             connection.execute(
-                text("UPDATE users SET is_admin = 1 WHERE id = :user_id AND COALESCE(is_admin, 0) = 0"),
+                text("UPDATE users SET is_admin = TRUE WHERE id = :user_id AND COALESCE(is_admin, FALSE) = FALSE"),
                 {"user_id": user_ids[0]},
             )
         if len(user_ids) == 1:

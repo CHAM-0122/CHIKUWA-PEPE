@@ -1,0 +1,10 @@
+[Unit]
+Description=Dog Growth Journal Backup Job
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ec2-user
+WorkingDirectory=/home/ec2-user/CHIKUWA-PEPE
+ExecStart=/home/ec2-user/CHIKUWA-PEPE/scripts/backup-prod.sh /home/ec2-user/CHIKUWA-PEPE 7

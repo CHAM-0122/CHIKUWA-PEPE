@@ -72,13 +72,27 @@ sudo systemctl start dog-growth-journal.service
 sudo systemctl status dog-growth-journal.service
 ```
 
-## 7. バックアップ対象
+## 7. 日次バックアップの自動化
+
+```bash
+cd ~/CHIKUWA-PEPE
+./scripts/install-backup-timer.sh "$HOME/CHIKUWA-PEPE"
+```
+
+確認:
+
+```bash
+sudo systemctl status dog-growth-journal-backup.timer --no-pager
+sudo systemctl list-timers dog-growth-journal-backup.timer --all --no-pager
+```
+
+## 8. バックアップ対象
 
 - Docker volume の PostgreSQL データ
 - `~/CHIKUWA-PEPE/uploads/`
 - `.env.production`
 
-## 8. 次にやると良いこと
+## 9. 次にやると良いこと
 
 - 独自ドメインを Route 53 などで紐付ける
 - HTTPS を入れる

@@ -100,3 +100,27 @@ DB とアップロード画像のバックアップ:
 - `backup-prod.sh` を cron か systemd timer で日次実行する
 - バックアップディレクトリごと S3 へ同期する場合は `aws s3 sync backups/ s3://your-backup-bucket/` を使う
 - `docker compose ps` だけでなく `healthz` も毎回確認する
+
+
+## 9. 自動バックアップ
+
+日次バックアップを `systemd timer` で有効化:
+
+```bash
+./scripts/install-backup-timer.sh "$HOME/CHIKUWA-PEPE"
+```
+
+既定では毎日 `03:15` 頃にバックアップします。`RandomizedDelaySec=10m` があるため、実際の実行は少し前後します。
+
+状態確認:
+
+```bash
+sudo systemctl status dog-growth-journal-backup.timer --no-pager
+sudo systemctl list-timers dog-growth-journal-backup.timer --all --no-pager
+```
+
+手動実行:
+
+```bash
+sudo systemctl start dog-growth-journal-backup.service
+```

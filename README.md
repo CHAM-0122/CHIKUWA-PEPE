@@ -42,6 +42,7 @@ docker compose up --build
 - `scripts/renew-cert.sh`: 証明書更新
 - `scripts/check-prod.sh`: 本番状態の一次確認
 - `scripts/backup-prod.sh`: DB と uploads のバックアップ
+- `scripts/install-backup-timer.sh`: 日次バックアップ timer の導入
 - `deploy/dog-growth-journal.service`: systemd 自動起動設定
 - `docs/aws-ec2-deploy.md`: EC2 デプロイ手順
 
@@ -94,4 +95,10 @@ CloudWatch Logs と S3 を使う構成は [docs/aws-observability.md](docs/aws-o
 
 ```bash
 ./scripts/backup-prod.sh "$HOME/CHIKUWA-PEPE" 7
+```
+
+日次バックアップ timer の導入:
+
+```bash
+./scripts/install-backup-timer.sh "$HOME/CHIKUWA-PEPE"
 ```

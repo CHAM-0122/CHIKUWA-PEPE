@@ -45,6 +45,28 @@ def test_setup_and_login_flow(raw_client):
     assert login.status_code == 200
     assert "ログインしました" in login.text
 
+def test_admin_dashboard_visible_only_to_admin(client):
+    admin_page = client.get('/admin')
+    assert admin_page.status_code == 200
+    assert '管理画面' in admin_page.text
+    assert 'owner@example.com' in admin_page.text
+    assert '管理者' in admin_page.text
+
+    with TestClient(client.app) as second_client:
+        second_client.post(
+            '/register',
+            data={
+                'email': 'family@example.com',
+                'password': 'anothersecurepassword',
+                'password_confirm': 'anothersecurepassword',
+            },
+            follow_redirects=True,
+        )
+        forbidden = second_client.get('/admin')
+        assert forbidden.status_code == 403
+        assert '管理者のみアクセスできます' in forbidden.text
+
+
 def test_register_creates_second_user_and_isolates_dogs(client):
     first_dog = client.post('/api/dogs', data={'name': 'Mugi'})
     assert first_dog.status_code == 201

@@ -42,7 +42,16 @@ def migrate_existing_schema(engine) -> None:
         if "users" not in inspector.get_table_names():
             return
 
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+        if "is_admin" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
+
         user_ids = connection.execute(text("SELECT id FROM users ORDER BY id ASC")).scalars().all()
+        if user_ids:
+            connection.execute(
+                text("UPDATE users SET is_admin = 1 WHERE id = :user_id AND COALESCE(is_admin, 0) = 0"),
+                {"user_id": user_ids[0]},
+            )
         if len(user_ids) == 1:
             connection.execute(
                 text("UPDATE dogs SET user_id = :user_id WHERE user_id IS NULL"),
@@ -160,6 +169,12 @@ def current_user_id(request: Request) -> int:
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required.")
     return current_user.id
+
+
+def require_admin(request: Request) -> None:
+    current_user = getattr(request.state, "current_user", None)
+    if not current_user or not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="管理者のみアクセスできます。")
 
 
 def list_user_dogs(db: Session, user_id: int):
@@ -330,7 +345,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=400,
             )
 
-        user = User(email=normalized_email, password_hash=hash_password(password))
+        user = User(email=normalized_email, password_hash=hash_password(password), is_admin=True)
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -378,7 +393,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=400,
             )
 
-        user = User(email=normalized_email, password_hash=hash_password(password))
+        user = User(email=normalized_email, password_hash=hash_password(password), is_admin=False)
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -471,6 +486,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db.refresh(user)
         request.state.current_user = user
         return redirect_with_message("/account/password", "パスワードを変更しました。")
+
+    @app.get("/admin", response_class=HTMLResponse)
+    def admin_dashboard(request: Request, db: Session = Depends(get_db)):
+        require_admin(request)
+
+        users = db.scalars(select(User).options(selectinload(User.dogs)).order_by(User.created_at.asc(), User.id.asc())).all()
+        total_dogs = db.scalar(select(func.count(Dog.id))) or 0
+        total_records = db.scalar(select(func.count(DailyRecord.id))) or 0
+        user_rows = []
+        for user in users:
+            record_count = db.scalar(
+                select(func.count(DailyRecord.id)).join(DailyRecord.dog).where(Dog.user_id == user.id)
+            ) or 0
+            user_rows.append(
+                {
+                    "user": user,
+                    "dog_count": len(user.dogs),
+                    "record_count": record_count,
+                }
+            )
+
+        return render_template(
+            request,
+            "admin.html",
+            {
+                "user_rows": user_rows,
+                "total_users": len(users),
+                "total_dogs": total_dogs,
+                "total_records": total_records,
+            },
+        )
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request, db: Session = Depends(get_db)):

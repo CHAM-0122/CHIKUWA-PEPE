@@ -14,6 +14,9 @@
           {% if current_user %}
             <a href="/dogs">犬一覧</a>
             <a href="/records">記録一覧</a>
+            {% if current_user.is_admin %}
+              <a href="/admin">管理画面</a>
+            {% endif %}
             <a href="/account/password">パスワード変更</a>
             <span class="user-chip">{{ current_user.email }}</span>
             <form method="post" action="/logout">

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}管理画面 | Dog Growth Journal{% endblock %}
+{% block content %}
+<section class="hero compact">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>管理画面</h1>
+    <p class="lede">ユーザー数、犬の登録数、記録数をまとめて確認できます。</p>
+  </div>
+</section>
+
+<section class="summary-grid admin-summary-grid">
+  <article class="summary-card">
+    <p class="eyebrow">Users</p>
+    <strong>{{ total_users }}</strong>
+    <span>登録アカウント数</span>
+  </article>
+  <article class="summary-card">
+    <p class="eyebrow">Dogs</p>
+    <strong>{{ total_dogs }}</strong>
+    <span>全ユーザーの犬登録数</span>
+  </article>
+  <article class="summary-card">
+    <p class="eyebrow">Records</p>
+    <strong>{{ total_records }}</strong>
+    <span>全ユーザーの記録数</span>
+  </article>
+</section>
+
+<section class="panel admin-panel">
+  <div class="panel-head">
+    <h2>ユーザー一覧</h2>
+    <span class="badge">{{ total_users }}人</span>
+  </div>
+  {% if user_rows %}
+    <div class="table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>メールアドレス</th>
+            <th>権限</th>
+            <th>犬数</th>
+            <th>記録数</th>
+            <th>登録日</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in user_rows %}
+            <tr>
+              <td>{{ row.user.email }}</td>
+              <td>{% if row.user.is_admin %}管理者{% else %}一般{% endif %}</td>
+              <td>{{ row.dog_count }}</td>
+              <td>{{ row.record_count }}</td>
+              <td>{{ row.user.created_at.date() if row.user.created_at else "-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">ユーザーはまだ登録されていません。</p>
+  {% endif %}
+</section>
+{% endblock %}

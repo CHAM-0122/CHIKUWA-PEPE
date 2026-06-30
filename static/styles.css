@@ -420,3 +420,39 @@ form {
   color: var(--muted);
   margin-bottom: 20px;
 }
+
+
+.hero.compact {
+  padding-bottom: 12px;
+}
+
+.admin-summary-grid {
+  margin-top: 12px;
+}
+
+.admin-panel {
+  margin-top: 24px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid rgba(49, 39, 27, 0.12);
+  text-align: left;
+}
+
+.admin-table th {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}

@@ -40,6 +40,8 @@ docker compose up --build
 - `scripts/request-cert.sh`: Let's Encrypt 証明書の初回取得
 - `scripts/deploy-https.sh`: HTTPS 構成でのデプロイ
 - `scripts/renew-cert.sh`: 証明書更新
+- `scripts/check-prod.sh`: 本番状態の一次確認
+- `scripts/backup-prod.sh`: DB と uploads のバックアップ
 - `deploy/dog-growth-journal.service`: systemd 自動起動設定
 - `docs/aws-ec2-deploy.md`: EC2 デプロイ手順
 
@@ -81,3 +83,15 @@ pytest
 ## 監視・ログ保管
 
 CloudWatch Logs と S3 を使う構成は [docs/aws-observability.md](docs/aws-observability.md) を見てください。
+
+障害時の一次確認:
+
+```bash
+./scripts/check-prod.sh "$HOME/CHIKUWA-PEPE"
+```
+
+バックアップ作成:
+
+```bash
+./scripts/backup-prod.sh "$HOME/CHIKUWA-PEPE" 7
+```

@@ -72,3 +72,31 @@ s3://your-log-archive-bucket/cloudwatch-export/YYYY/MM/DD/
 - S3 はライフサイクルルールで長期保管へ移行
 - SNS 通知先はメールか Chatbot/Slack
 - 週次または日次で `export-logs-to-s3.sh` を cron 実行
+
+
+## 7. 日常運用コマンド
+
+本番状態の確認:
+
+```bash
+./scripts/check-prod.sh "$HOME/CHIKUWA-PEPE"
+```
+
+DB とアップロード画像のバックアップ:
+
+```bash
+./scripts/backup-prod.sh "$HOME/CHIKUWA-PEPE" 7
+```
+
+`backups/YYYYMMDD-HHMMSS/` に次が作成されます。
+
+- `database.sql`
+- `uploads.tar.gz`
+- `README.txt`
+
+## 8. 運用のおすすめ
+
+- `check-prod.sh` を障害時の一次確認に使う
+- `backup-prod.sh` を cron か systemd timer で日次実行する
+- バックアップディレクトリごと S3 へ同期する場合は `aws s3 sync backups/ s3://your-backup-bucket/` を使う
+- `docker compose ps` だけでなく `healthz` も毎回確認する

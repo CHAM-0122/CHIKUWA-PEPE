@@ -1,5 +1,11 @@
 from io import BytesIO
+import sqlite3
 from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from app.config import Settings
+from app.main import create_app
 
 
 def test_setup_and_login_flow(raw_client):
@@ -38,6 +44,154 @@ def test_setup_and_login_flow(raw_client):
     )
     assert login.status_code == 200
     assert "ログインしました" in login.text
+
+
+from fastapi.testclient import TestClient
+
+from app.config import Settings
+from app.main import create_app
+
+
+def test_register_creates_second_user_and_isolates_dogs(client):
+    first_dog = client.post('/api/dogs', data={'name': 'Mugi'})
+    assert first_dog.status_code == 201
+
+    with TestClient(client.app) as second_client:
+        register = second_client.post(
+            '/register',
+            data={
+                'email': 'family@example.com',
+                'password': 'anothersecurepassword',
+                'password_confirm': 'anothersecurepassword',
+            },
+            follow_redirects=True,
+        )
+        assert register.status_code == 200
+        assert 'アカウントを登録しました' in register.text
+
+        dogs = second_client.get('/api/dogs')
+        assert dogs.status_code == 200
+        assert dogs.json() == []
+
+        created = second_client.post('/api/dogs', data={'name': 'Sora'})
+        assert created.status_code == 201
+
+    first_user_dogs = client.get('/api/dogs')
+    assert first_user_dogs.status_code == 200
+    assert [dog['name'] for dog in first_user_dogs.json()] == ['Mugi']
+
+
+def test_migrates_legacy_dogs_and_claims_them_on_first_setup(tmp_path):
+    db_path = tmp_path / "legacy.db"
+    upload_dir = tmp_path / "uploads"
+
+    connection = sqlite3.connect(db_path)
+    connection.execute(
+        """
+        CREATE TABLE dogs (
+            id INTEGER PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            birth_date DATE,
+            breed VARCHAR(100),
+            sex VARCHAR(20),
+            notes TEXT,
+            profile_image VARCHAR(255),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE daily_records (
+            id INTEGER PRIMARY KEY,
+            dog_id INTEGER NOT NULL,
+            record_date DATE NOT NULL,
+            weight FLOAT,
+            food_notes TEXT,
+            walk_notes TEXT,
+            health_notes TEXT,
+            photo_path VARCHAR(255),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+        )
+        """
+    )
+    connection.execute("INSERT INTO dogs (name) VALUES ('Legacy Dog')")
+    connection.commit()
+    connection.close()
+
+    settings = Settings(
+        app_env="test",
+        database_url=f"sqlite:///{db_path}",
+        upload_dir=str(upload_dir),
+        secret_key="test-secret",
+    )
+
+    app = create_app(settings)
+    with TestClient(app) as legacy_client:
+        setup = legacy_client.post(
+            "/setup",
+            data={
+                "email": "owner@example.com",
+                "password": "verysecurepassword",
+                "password_confirm": "verysecurepassword",
+            },
+            follow_redirects=True,
+        )
+        assert setup.status_code == 200
+
+        dogs = legacy_client.get("/api/dogs")
+        assert dogs.status_code == 200
+        assert [dog["name"] for dog in dogs.json()] == ["Legacy Dog"]
+
+
+def test_change_password_flow(client):
+    page = client.get("/account/password")
+    assert page.status_code == 200
+    assert "パスワード変更" in page.text
+
+    wrong_current = client.post(
+        "/account/password",
+        data={
+            "current_password": "wrongpass123",
+            "new_password": "newsecurepassword",
+            "new_password_confirm": "newsecurepassword",
+        },
+        follow_redirects=True,
+    )
+    assert wrong_current.status_code == 400
+    assert "現在のパスワードが違います" in wrong_current.text
+
+    changed = client.post(
+        "/account/password",
+        data={
+            "current_password": "verysecurepassword",
+            "new_password": "newsecurepassword",
+            "new_password_confirm": "newsecurepassword",
+        },
+        follow_redirects=True,
+    )
+    assert changed.status_code == 200
+    assert "パスワードを変更しました" in changed.text
+
+    client.post("/logout", follow_redirects=True)
+
+    old_login = client.post(
+        "/login",
+        data={"email": "owner@example.com", "password": "verysecurepassword"},
+        follow_redirects=True,
+    )
+    assert old_login.status_code == 400
+    assert "メールアドレスまたはパスワードが違います" in old_login.text
+
+    new_login = client.post(
+        "/login",
+        data={"email": "owner@example.com", "password": "newsecurepassword"},
+        follow_redirects=True,
+    )
+    assert new_login.status_code == 200
+    assert "ログインしました" in new_login.text
 
 
 def test_create_multiple_dogs_and_list_in_api(client):

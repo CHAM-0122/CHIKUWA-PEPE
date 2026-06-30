@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}新規登録 | Dog Growth Journal{% endblock %}
+
+{% block content %}
+  <section class="auth-shell">
+    <div class="card auth-panel">
+      <h1>新規登録</h1>
+      <p class="auth-copy">家族ごとにアカウントを作成して、それぞれの犬と記録を分けて管理できます。</p>
+
+      {% include "partials/errors.html" %}
+
+      <form method="post" class="stack-form">
+        <label>
+          メールアドレス
+          <input type="email" name="email" value="{{ form_data.email if form_data else '' }}" autocomplete="email" required />
+        </label>
+        <label>
+          パスワード
+          <input type="password" name="password" autocomplete="new-password" minlength="8" required />
+        </label>
+        <label>
+          パスワード（確認）
+          <input type="password" name="password_confirm" autocomplete="new-password" minlength="8" required />
+        </label>
+        <button type="submit">アカウントを登録</button>
+      </form>
+    </div>
+  </section>
+{% endblock %}

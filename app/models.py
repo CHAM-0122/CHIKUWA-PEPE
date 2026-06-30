@@ -20,11 +20,14 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    dogs: Mapped[list["Dog"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
 
 class Dog(Base):
     __tablename__ = "dogs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     breed: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
@@ -38,6 +41,7 @@ class Dog(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    user: Mapped[User] = relationship(back_populates="dogs")
     records: Mapped[list["DailyRecord"]] = relationship(
         back_populates="dog",
         cascade="all, delete-orphan",

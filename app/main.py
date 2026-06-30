@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Respon
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select, text, update
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -24,9 +24,20 @@ from .models import DailyRecord, Dog, User
 templates = Jinja2Templates(directory="templates")
 PUBLIC_PATH_PREFIXES = ("/static", "/uploads")
 SETUP_PATHS = {"/setup"}
-AUTH_PATHS = {"/login", "/logout"}
+AUTH_PATHS = {"/login", "/logout", "/register"}
 OPEN_PATHS = {"/healthz"}
 PASSWORD_ITERATIONS = 390000
+
+
+def migrate_existing_schema(engine) -> None:
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        if "dogs" not in inspector.get_table_names():
+            return
+        dog_columns = {column["name"] for column in inspector.get_columns("dogs")}
+        if "user_id" not in dog_columns:
+            connection.execute(text("ALTER TABLE dogs ADD COLUMN user_id INTEGER"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_dogs_user_id ON dogs (user_id)"))
 
 
 def parse_optional_date(value: str | None) -> date | None:
@@ -134,6 +145,31 @@ def get_db(request: Request):
         session.close()
 
 
+def current_user_id(request: Request) -> int:
+    current_user = getattr(request.state, "current_user", None)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    return current_user.id
+
+
+def list_user_dogs(db: Session, user_id: int):
+    return db.scalars(select(Dog).where(Dog.user_id == user_id).order_by(Dog.name.asc())).all()
+
+
+def get_owned_dog(db: Session, user_id: int, dog_id: int, *, with_records: bool = False) -> Dog | None:
+    query = select(Dog).where(Dog.user_id == user_id, Dog.id == dog_id)
+    if with_records:
+        query = query.options(selectinload(Dog.records))
+    return db.scalar(query)
+
+
+def get_owned_record(db: Session, user_id: int, record_id: int, *, with_dog: bool = False) -> DailyRecord | None:
+    query = select(DailyRecord).join(DailyRecord.dog).where(Dog.user_id == user_id, DailyRecord.id == record_id)
+    if with_dog:
+        query = query.options(selectinload(DailyRecord.dog))
+    return db.scalar(query)
+
+
 def render_template(
     request: Request,
     name: str,
@@ -157,6 +193,7 @@ async def lifespan(app: FastAPI):
     app.state.engine = create_db_engine(settings)
     app.state.SessionLocal = create_session_local(app.state.engine)
     Base.metadata.create_all(bind=app.state.engine)
+    migrate_existing_schema(app.state.engine)
     yield
     app.state.engine.dispose()
 
@@ -195,7 +232,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if path in SETUP_PATHS:
                 target = "/" if request.state.current_user else "/login"
                 return RedirectResponse(url=target, status_code=303)
-            if path == "/login" and request.state.current_user:
+            if path in {"/login", "/register"} and request.state.current_user:
                 return RedirectResponse(url="/", status_code=303)
             if path == "/logout" and not request.state.current_user:
                 return RedirectResponse(url="/login", status_code=303)
@@ -208,6 +245,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def validate_record_form(
         db: Session,
+        user_id: int,
         dog_id: str,
         record_date: str,
         weight: str,
@@ -221,7 +259,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             errors.append("対象の犬を選択してください。")
         else:
             try:
-                dog = db.get(Dog, int(dog_id))
+                dog = get_owned_dog(db, user_id, int(dog_id))
             except ValueError:
                 dog = None
             if not dog:
@@ -286,10 +324,58 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db.add(user)
         db.commit()
         db.refresh(user)
+        db.execute(update(Dog).where(Dog.user_id.is_(None)).values(user_id=user.id))
+        db.commit()
         request.session["user_id"] = user.id
         request.state.current_user = user
         request.state.has_users = True
         return redirect_with_message("/", "ログイン用アカウントを作成しました。")
+
+    @app.get("/register", response_class=HTMLResponse)
+    def register_page(request: Request):
+        return render_template(
+            request,
+            "register.html",
+            {"errors": [], "form_data": {}},
+        )
+
+    @app.post("/register", response_class=HTMLResponse)
+    def register(
+        request: Request,
+        email: str = Form(...),
+        password: str = Form(...),
+        password_confirm: str = Form(...),
+        db: Session = Depends(get_db),
+    ):
+        normalized_email = normalize_email(email)
+        errors: list[str] = []
+        if not normalized_email:
+            errors.append("メールアドレスは必須です。")
+        if "@" not in normalized_email:
+            errors.append("有効なメールアドレスを入力してください。")
+        if len(password) < 8:
+            errors.append("パスワードは 8 文字以上で入力してください。")
+        if password != password_confirm:
+            errors.append("確認用パスワードが一致しません。")
+        if db.scalar(select(User).where(User.email == normalized_email)):
+            errors.append("このメールアドレスは既に登録されています。")
+
+        if errors:
+            return render_template(
+                request,
+                "register.html",
+                {"errors": errors, "form_data": {"email": email}},
+                status_code=400,
+            )
+
+        user = User(email=normalized_email, password_hash=hash_password(password))
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        request.session["user_id"] = user.id
+        request.state.current_user = user
+        request.state.has_users = True
+        return redirect_with_message("/", "アカウントを登録しました。")
 
     @app.get("/login", response_class=HTMLResponse)
     def login_page(request: Request):
@@ -326,22 +412,77 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request.session.clear()
         return redirect_with_message("/login", "ログアウトしました。")
 
+    @app.get("/account/password", response_class=HTMLResponse)
+    def change_password_page(request: Request):
+        return render_template(
+            request,
+            "change_password.html",
+            {"errors": []},
+        )
+
+    @app.post("/account/password", response_class=HTMLResponse)
+    def change_password(
+        request: Request,
+        current_password: str = Form(...),
+        new_password: str = Form(...),
+        new_password_confirm: str = Form(...),
+        db: Session = Depends(get_db),
+    ):
+        current_user = request.state.current_user
+        if not current_user:
+            return RedirectResponse(url="/login", status_code=303)
+
+        user = db.get(User, current_user.id)
+        if not user:
+            request.session.clear()
+            return RedirectResponse(url="/login", status_code=303)
+
+        errors: list[str] = []
+        if not verify_password(current_password, user.password_hash):
+            errors.append("現在のパスワードが違います。")
+        if len(new_password) < 8:
+            errors.append("新しいパスワードは 8 文字以上で入力してください。")
+        if new_password != new_password_confirm:
+            errors.append("確認用パスワードが一致しません。")
+        if verify_password(new_password, user.password_hash):
+            errors.append("新しいパスワードは現在のパスワードと違うものにしてください。")
+
+        if errors:
+            return render_template(
+                request,
+                "change_password.html",
+                {"errors": errors},
+                status_code=400,
+            )
+
+        user.password_hash = hash_password(new_password)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        request.state.current_user = user
+        return redirect_with_message("/account/password", "パスワードを変更しました。")
+
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request, db: Session = Depends(get_db)):
+        user_id = current_user_id(request)
         dogs = db.scalars(
-            select(Dog).options(selectinload(Dog.records)).order_by(Dog.name.asc())
+            select(Dog).options(selectinload(Dog.records)).where(Dog.user_id == user_id).order_by(Dog.name.asc())
         ).all()
         recent_records = db.scalars(
             select(DailyRecord)
+            .join(DailyRecord.dog)
+            .where(Dog.user_id == user_id)
             .options(selectinload(DailyRecord.dog))
             .order_by(DailyRecord.record_date.desc(), DailyRecord.created_at.desc())
             .limit(10)
         ).all()
         today = date.today()
         week_start = today - timedelta(days=6)
-        total_records = db.scalar(select(func.count(DailyRecord.id))) or 0
+        total_records = db.scalar(select(func.count(DailyRecord.id)).join(DailyRecord.dog).where(Dog.user_id == user_id)) or 0
         weekly_records = db.scalar(
-            select(func.count(DailyRecord.id)).where(DailyRecord.record_date >= week_start)
+            select(func.count(DailyRecord.id))
+            .join(DailyRecord.dog)
+            .where(Dog.user_id == user_id, DailyRecord.record_date >= week_start)
         ) or 0
         dog_summaries = []
         for dog in dogs:
@@ -372,7 +513,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/dogs", response_class=HTMLResponse)
     def dogs_page(request: Request, db: Session = Depends(get_db)):
-        dogs = db.scalars(select(Dog).order_by(Dog.name.asc())).all()
+        dogs = list_user_dogs(db, current_user_id(request))
         return render_template(
             request,
             "dogs.html",
@@ -416,7 +557,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 errors.append(exc.detail)
 
         if errors:
-            dogs = db.scalars(select(Dog).order_by(Dog.name.asc())).all()
+            dogs = list_user_dogs(db, current_user_id(request))
             return render_template(
                 request,
                 "dogs.html",
@@ -425,6 +566,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
         dog = Dog(
+            user_id=current_user_id(request),
             name=name.strip(),
             birth_date=parsed_birth_date,
             breed=breed.strip() or None,
@@ -438,9 +580,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/dogs/{dog_id}", response_class=HTMLResponse)
     def dog_detail(request: Request, dog_id: int, db: Session = Depends(get_db)):
-        dog = db.scalar(
-            select(Dog).options(selectinload(Dog.records)).where(Dog.id == dog_id)
-        )
+        dog = get_owned_dog(db, current_user_id(request), dog_id, with_records=True)
         if not dog:
             raise HTTPException(status_code=404, detail="Dog not found")
         latest_record = max(dog.records, key=lambda item: item.record_date) if dog.records else None
@@ -457,7 +597,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/dogs/{dog_id}/edit", response_class=HTMLResponse)
     def edit_dog_page(request: Request, dog_id: int, db: Session = Depends(get_db)):
-        dog = db.get(Dog, dog_id)
+        dog = get_owned_dog(db, current_user_id(request), dog_id)
         if not dog:
             raise HTTPException(status_code=404, detail="Dog not found")
         return render_template(
@@ -479,7 +619,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         profile_image: UploadFile | None = File(default=None),
         db: Session = Depends(get_db),
     ):
-        dog = db.get(Dog, dog_id)
+        dog = get_owned_dog(db, current_user_id(request), dog_id)
         if not dog:
             raise HTTPException(status_code=404, detail="Dog not found")
 
@@ -530,7 +670,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/dogs/{dog_id}/delete")
     def delete_dog(request: Request, dog_id: int, db: Session = Depends(get_db)):
-        dog = db.scalar(select(Dog).options(selectinload(Dog.records)).where(Dog.id == dog_id))
+        dog = get_owned_dog(db, current_user_id(request), dog_id, with_records=True)
         if not dog:
             raise HTTPException(status_code=404, detail="Dog not found")
 
@@ -546,13 +686,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/records", response_class=HTMLResponse)
     def records_page(request: Request, dog_id: int | None = None, db: Session = Depends(get_db)):
-        dogs = db.scalars(select(Dog).order_by(Dog.name.asc())).all()
-        query = select(DailyRecord).options(selectinload(DailyRecord.dog)).order_by(
-            DailyRecord.record_date.desc(), DailyRecord.created_at.desc()
+        dogs = list_user_dogs(db, current_user_id(request))
+        user_id = current_user_id(request)
+        query = (
+            select(DailyRecord)
+            .join(DailyRecord.dog)
+            .where(Dog.user_id == user_id)
+            .options(selectinload(DailyRecord.dog))
+            .order_by(DailyRecord.record_date.desc(), DailyRecord.created_at.desc())
         )
         selected_dog = None
         if dog_id:
-            selected_dog = db.get(Dog, dog_id)
+            selected_dog = get_owned_dog(db, current_user_id(request), dog_id)
             if selected_dog:
                 query = query.where(DailyRecord.dog_id == dog_id)
         records = db.scalars(query).all()
@@ -580,7 +725,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         photo: UploadFile | None = File(default=None),
         db: Session = Depends(get_db),
     ):
-        errors, dog, parsed_date, parsed_weight = validate_record_form(db, dog_id, record_date, weight)
+        errors, dog, parsed_date, parsed_weight = validate_record_form(db, current_user_id(request), dog_id, record_date, weight)
         form_data = {
             "dog_id": dog_id,
             "record_date": record_date,
@@ -597,9 +742,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 errors.append(exc.detail)
 
         if errors:
-            dogs = db.scalars(select(Dog).order_by(Dog.name.asc())).all()
+            dogs = list_user_dogs(db, current_user_id(request))
+            user_id = current_user_id(request)
             records = db.scalars(
                 select(DailyRecord)
+                .join(DailyRecord.dog)
+                .where(Dog.user_id == user_id)
                 .options(selectinload(DailyRecord.dog))
                 .order_by(DailyRecord.record_date.desc(), DailyRecord.created_at.desc())
             ).all()
@@ -631,12 +779,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/records/{record_id}/edit", response_class=HTMLResponse)
     def edit_record_page(request: Request, record_id: int, db: Session = Depends(get_db)):
-        record = db.scalar(
-            select(DailyRecord).options(selectinload(DailyRecord.dog)).where(DailyRecord.id == record_id)
-        )
+        record = get_owned_record(db, current_user_id(request), record_id, with_dog=True)
         if not record:
             raise HTTPException(status_code=404, detail="Record not found")
-        dogs = db.scalars(select(Dog).order_by(Dog.name.asc())).all()
+        dogs = list_user_dogs(db, current_user_id(request))
         return render_template(
             request,
             "record_edit.html",
@@ -657,11 +803,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         photo: UploadFile | None = File(default=None),
         db: Session = Depends(get_db),
     ):
-        record = db.get(DailyRecord, record_id)
+        record = get_owned_record(db, current_user_id(request), record_id)
         if not record:
             raise HTTPException(status_code=404, detail="Record not found")
 
-        errors, dog, parsed_date, parsed_weight = validate_record_form(db, dog_id, record_date, weight)
+        errors, dog, parsed_date, parsed_weight = validate_record_form(db, current_user_id(request), dog_id, record_date, weight)
         form_data = {
             "dog_id": dog_id,
             "record_date": record_date,
@@ -682,10 +828,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             record.photo_path = None
 
         if errors:
-            dogs = db.scalars(select(Dog).order_by(Dog.name.asc())).all()
-            hydrated_record = db.scalar(
-                select(DailyRecord).options(selectinload(DailyRecord.dog)).where(DailyRecord.id == record_id)
-            )
+            dogs = list_user_dogs(db, current_user_id(request))
+            hydrated_record = get_owned_record(db, current_user_id(request), record_id, with_dog=True)
             return render_template(
                 request,
                 "record_edit.html",
@@ -704,7 +848,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/records/{record_id}/delete")
     def delete_record(request: Request, record_id: int, db: Session = Depends(get_db)):
-        record = db.get(DailyRecord, record_id)
+        record = get_owned_record(db, current_user_id(request), record_id)
         if not record:
             raise HTTPException(status_code=404, detail="Record not found")
 
@@ -717,8 +861,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return redirect_with_message(f"/dogs/{dog_id}", f"{dog_name} の記録を削除しました。")
 
     @app.get("/api/dogs")
-    def api_list_dogs(db: Session = Depends(get_db)):
-        dogs = db.scalars(select(Dog).order_by(Dog.name.asc())).all()
+    def api_list_dogs(request: Request, db: Session = Depends(get_db)):
+        dogs = list_user_dogs(db, current_user_id(request))
         return [
             {
                 "id": dog.id,
@@ -751,6 +895,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="生年月日は YYYY-MM-DD 形式で入力してください。") from exc
         image_path = await save_upload(profile_image, request.app.state.settings, "dogs")
         dog = Dog(
+            user_id=current_user_id(request),
             name=name.strip(),
             birth_date=parsed_birth_date,
             breed=breed.strip() or None,
@@ -765,7 +910,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.delete("/api/dogs/{dog_id}", status_code=204)
     def api_delete_dog(dog_id: int, request: Request, db: Session = Depends(get_db)):
-        dog = db.scalar(select(Dog).options(selectinload(Dog.records)).where(Dog.id == dog_id))
+        dog = get_owned_dog(db, current_user_id(request), dog_id, with_records=True)
         if not dog:
             raise HTTPException(status_code=404, detail="Dog not found")
 
@@ -788,7 +933,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         photo: UploadFile | None = File(default=None),
         db: Session = Depends(get_db),
     ):
-        errors, dog, parsed_date, parsed_weight = validate_record_form(db, dog_id, record_date, weight)
+        errors, dog, parsed_date, parsed_weight = validate_record_form(db, current_user_id(request), dog_id, record_date, weight)
         if errors:
             raise HTTPException(status_code=400, detail=errors)
         photo_path = await save_upload(photo, request.app.state.settings, "records")
@@ -808,7 +953,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.delete("/api/records/{record_id}", status_code=204)
     def api_delete_record(record_id: int, request: Request, db: Session = Depends(get_db)):
-        record = db.get(DailyRecord, record_id)
+        record = get_owned_record(db, current_user_id(request), record_id)
         if not record:
             raise HTTPException(status_code=404, detail="Record not found")
         photo_path = record.photo_path
